@@ -306,9 +306,6 @@ pub async fn list_company_reviews(
         i += 1;
     }
 
-    // Don't show deleted reviews
-    sql.push_str(" AND deleted_at IS NULL");
-
     if let Some(c) = &cursor {
         // (created_at, id) < (c.created_at, c.id) in DESC order means
         // created_at < c.created_at OR (created_at = c.created_at AND id < c.id)

@@ -1,17 +1,16 @@
 use axum::http::StatusCode;
 use axum_test::TestServer;
-use bigdecimal::BigDecimal;
 use chrono::Utc;
 use serde_json::json;
 use sqlx::PgPool;
 use std::env;
-use std::str::FromStr;
 
 use backend::libs::db::AppState;
 
 fn get_test_db_url() -> String {
-    env::var("TEST_DATABASE_URL")
-        .unwrap_or_else("postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable")
+    env::var("TEST_DATABASE_URL").unwrap_or_else(|_| {
+        "postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable".to_string()
+    })
 }
 
 async fn setup_test_db(pool: &PgPool) -> anyhow::Result<()> {
@@ -33,7 +32,7 @@ async fn setup_test_db(pool: &PgPool) -> anyhow::Result<()> {
         VALUES ($1, $2, $3, $4, $5, $6)"#,
         company,
         Some("tag1"),
-        BigDecimal::from_str("0.8").unwrap(),
+        "0.8".parse::<sqlx::types::BigDecimal>().unwrap(),
         "Test review 1",
         now,
         "published"
@@ -47,7 +46,7 @@ async fn setup_test_db(pool: &PgPool) -> anyhow::Result<()> {
         VALUES ($1, $2, $3, $4, $5, $6, $7)"#,
         company,
         Some("tag2"),
-        BigDecimal::from_str("0.6").unwrap(),
+        "0.6".parse::<sqlx::types::BigDecimal>().unwrap(),
         "Test review 2",
         now,
         "published",
@@ -62,7 +61,7 @@ async fn setup_test_db(pool: &PgPool) -> anyhow::Result<()> {
         VALUES ($1, $2, $3, $4, $5, $6)"#,
         company,
         Some("tag1"),
-        BigDecimal::from_str("0.7").unwrap(),
+        "0.7".parse::<sqlx::types::BigDecimal>().unwrap(),
         "Test review 3",
         now,
         "draft"
@@ -76,7 +75,7 @@ async fn setup_test_db(pool: &PgPool) -> anyhow::Result<()> {
         VALUES ($1, $2, $3, $4, $5, $6)"#,
         "other-company",
         Some("tag1"),
-        BigDecimal::from_str("0.9").unwrap(),
+        "0.9".parse::<sqlx::types::BigDecimal>().unwrap(),
         "Test review 4",
         now,
         "published"
@@ -146,7 +145,13 @@ async fn test_list_company_reviews() -> anyhow::Result<()> {
     let body: serde_json::Value = response.json();
     let items = body["items"].as_array().unwrap();
     assert_eq!(items.len(), 2); // Reviews with tag1 (excluding deleted)
-    assert_eq!(items[0]["id"], json!());
+    // Check that we have the expected reviews (published and draft with tag1)
+    let ids: Vec<i64> = items
+        .iter()
+        .map(|item| item["id"].as_i64().unwrap())
+        .collect();
+    assert!(ids.contains(&1)); // Published review with tag1
+    assert!(ids.contains(&3)); // Draft review with tag1
 
     // Test with non-existent company
     let response = server.get("/companies/non-existent/posts").await;
@@ -173,7 +178,7 @@ async fn test_text_sanitization() -> anyhow::Result<()> {
         10000,
         "test-company",
         Some("tag1"),
-        BigDecimal::from_str("0.8").unwrap(),
+        "0.8".parse::<sqlx::types::BigDecimal>().unwrap(),
         r#"<p>This is <strong>bold</strong> and <script>alert('xss')</script></p><img src="x" onerror="alert(1)"/>"#,
         now,
         "published"
